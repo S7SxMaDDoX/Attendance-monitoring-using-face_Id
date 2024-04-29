@@ -1,0 +1,283 @@
+import cv2
+import tkinter as tk
+from tkinter import messagebox
+import os
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
+def add_student_to_excel(student_id, student_name, age, gender):
+    student_data = pd.DataFrame({
+        'student_id': [int(student_id)],  # Convert student_id to integer
+        'student_name': [student_name],
+        'age': [age],
+        'gender': [gender]
+    })
+    if not os.path.exists('student_data.xlsx'):
+        student_data.to_excel('student_data.xlsx', index=False)
+    else:
+        student_data.to_excel('student_data.xlsx', index=False, header=False)
+
+def mark_attendance_in_excel(student_id, student_name):
+    attendance_data = pd.DataFrame({
+        'student_id': [student_id],
+        'student_name': [student_name],
+        'timestamp': [pd.Timestamp.now()]
+    })
+    if not os.path.exists('attendance_records.xlsx'):
+        attendance_data.to_excel('attendance_records.xlsx', index=False)
+    else:
+        attendance_data.to_excel('attendance_records.xlsx', index=False, header=False)
+
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+recognizer = cv2.face.LBPHFaceRecognizer_create()
+
+def detect_faces(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    return faces
+
+def train_recognizer(samples, labels):
+    recognizer.train(samples, np.array(labels))
+
+student_data = pd.read_excel('student_data.xlsx')
+def recognize_face(img, student_data):
+    if len(img.shape) > 2:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = img
+    id_, confidence = recognizer.predict(gray)
+    threshold = 60  # Initial threshold
+    if confidence < threshold:
+        student_name = get_student_name(student_data, id_)
+        if student_name != "Unknown":
+            mark_attendance_in_excel(id_, student_name)
+        return student_name
+    else:
+        # Try with a lower threshold if confidence is above the initial threshold
+        threshold -= 10
+        id_, confidence = recognizer.predict(gray)
+        if confidence < threshold:
+            student_name = get_student_name(student_data, id_)
+            if student_name != "Unknown":
+                mark_attendance_in_excel(id_, student_name)
+            return student_name
+        else:
+            return "Unknown"
+
+def load_training_data(data_directory):
+    samples = []
+    labels = []
+    for person_name in os.listdir(data_directory):
+        person_directory = os.path.join(data_directory, person_name)
+        if os.path.isdir(person_directory):
+            label = int(person_name)  # Assuming each directory name represents a unique label
+            for filename in os.listdir(person_directory):
+                filepath = os.path.join(person_directory, filename)
+                img = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
+                if img is not None:
+                    samples.append(img)
+                    labels.append(label)
+    return samples, labels
+
+def add_missing_columns(df):
+    df['student_id'] = np.nan
+    df['student_name'] = np.nan
+    return df
+
+def get_student_name(df, id_):
+    student = df[df['student_id'] == id_]
+    if not student.empty:
+        return student['student_name'].values[0]
+    else:
+        return "Unknown"
+
+def login():
+    username = username_entry.get()
+    password = password_entry.get()
+    if username == "admin" and password == "password":
+        messagebox.showinfo("Login Successful", "Welcome, Admin!")
+        home_page()
+    else:
+        messagebox.showerror("Login Failed", "Invalid username or password")
+
+def home_page():
+    root.destroy()  # Close login window
+    home = tk.Tk()
+    home.title("Home Page")
+    home.geometry("400x300")
+
+    student_management_button = tk.Button(home, text="Student Management", command=student_management)
+    student_management_button.pack()
+
+    train_samples_button = tk.Button(home, text="Train Photo Samples", command=train_samples)
+    train_samples_button.pack()
+
+    take_attendance_button = tk.Button(home, text="Take Attendance", command=take_attendance)
+    take_attendance_button.pack()
+
+    attendance_report_button = tk.Button(home, text="Attendance Report", command=attendance_report)
+    attendance_report_button.pack()
+
+    home.mainloop()
+
+def student_management():
+    def add_student():
+        student_name = student_name_entry.get()
+        student_id = student_id_entry.get()
+        add_student_to_excel(student_id, student_name, "", "")  
+        messagebox.showinfo("Student Added", f"Student {student_name} with ID {student_id} added successfully.")
+
+    def update_student():
+        student_name = student_name_entry.get()
+        student_id = student_id_entry.get()
+        messagebox.showinfo("Functionality Not Implemented", "Update Student functionality not implemented yet.")
+
+    def delete_student():
+        student_id = student_id_entry.get()
+        messagebox.showinfo("Functionality Not Implemented", "Delete Student functionality not implemented yet.")
+
+    def clear_students():
+        student_name_entry.delete(0, 'end')
+        student_id_entry.delete(0, 'end')
+        messagebox.showinfo("Students Cleared", "Student records cleared successfully.")
+
+    student_management_window = tk.Tk()
+    student_management_window.title("Student Management")
+    student_management_window.geometry("400x200")
+
+    student_name_label = tk.Label(student_management_window, text="Student Name:")
+    student_name_label.grid(row=0, column=0)
+    student_name_entry = tk.Entry(student_management_window)
+    student_name_entry.grid(row=0, column=1)
+
+    student_id_label = tk.Label(student_management_window, text="Student ID:")
+    student_id_label.grid(row=1, column=0)
+    student_id_entry = tk.Entry(student_management_window)
+    student_id_entry.grid(row=1, column=1)
+
+    add_student_button = tk.Button(student_management_window, text="Add Student", command=add_student)
+    add_student_button.grid(row=2, column=0)
+
+    update_student_button = tk.Button(student_management_window, text="Update Student", command=update_student)
+    update_student_button.grid(row=2, column=1)
+
+    delete_student_button = tk.Button(student_management_window, text="Delete Student", command=delete_student)
+    delete_student_button.grid(row=3, column=0)
+
+    clear_students_button = tk.Button(student_management_window, text="Clear Students", command=clear_students)
+    clear_students_button.grid(row=3, column=1)
+
+    student_management_window.mainloop()
+
+def train_samples():
+    def capture_photos():
+        cap = cv2.VideoCapture(0)
+        count = 0
+        while True:
+            ret, frame = cap.read()
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+            for (x, y, w, h) in faces:
+                roi_gray = gray[y:y+h, x:x+w]
+                if not os.path.exists(f"student_photos/{student_id_entry.get()}"):
+                    os.makedirs(f"student_photos/{student_id_entry.get()}")
+                cv2.imwrite(f"student_photos/{student_id_entry.get()}/{count}.jpg", roi_gray)
+                count += 1
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
+            cv2.imshow('Capture Photos', frame)
+            if cv2.waitKey(100) & 0xFF == ord('q'):
+                break
+            elif count >= 100:  
+                break
+        cap.release()
+        cv2.destroyAllWindows()
+
+    def train_model():
+        samples, labels = load_training_data("student_photos")
+        if not samples:
+            messagebox.showerror("Error", "No training data found.")
+            return
+        train_recognizer(samples, labels)
+        messagebox.showinfo("Training Completed", "Face recognition model trained successfully.")
+
+    train_samples_window = tk.Tk()
+    train_samples_window.title("Train Photo Samples")
+    train_samples_window.geometry("400x200")
+
+    student_name_label = tk.Label(train_samples_window, text="Student Name:")
+    student_name_label.pack()
+
+    student_name_entry = tk.Entry(train_samples_window)
+    student_name_entry.pack()
+
+    student_id_label = tk.Label(train_samples_window, text="Student ID:")
+    student_id_label.pack()
+
+    student_id_entry = tk.Entry(train_samples_window)
+    student_id_entry.pack()
+
+    capture_photos_button = tk.Button(train_samples_window, text="Capture Photos", command=capture_photos)
+    capture_photos_button.pack()
+
+    train_model_button = tk.Button(train_samples_window, text="Train Model", command=train_model)
+    train_model_button.pack()
+
+    train_samples_window.mainloop()
+
+def take_attendance():
+    def mark_attendance():
+        samples, labels = load_training_data("student_photos")
+        train_recognizer(samples, labels)
+
+        cap = cv2.VideoCapture(0)
+        while True:
+            ret, frame = cap.read()
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+            for (x, y, w, h) in faces:
+                roi_gray = gray[y:y+h, x:x+w]
+                id_ = recognize_face(roi_gray, student_data)
+                if id_ is not None:
+                    student_name = get_student_name(student_data, id_)
+                    cv2.putText(frame, student_name, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            cv2.imshow('Mark Attendance', frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+        cap.release()
+        cv2.destroyAllWindows()
+
+    take_attendance_window = tk.Tk()
+    take_attendance_window.title("Take Attendance")
+    take_attendance_window.geometry("400x200")
+
+    mark_attendance_button = tk.Button(take_attendance_window, text="Mark Attendance", command=mark_attendance)
+    mark_attendance_button.pack()
+
+    take_attendance_window.mainloop()
+
+def attendance_report():
+    # Functionality to generate attendance report
+    pass
+
+# Main program
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title("Login")
+    root.geometry("300x150")
+
+    username_label = tk.Label(root, text="Username:")
+    username_label.pack()
+    username_entry = tk.Entry(root)
+    username_entry.pack()
+
+    password_label = tk.Label(root, text="Password:")
+    password_label.pack()
+    password_entry = tk.Entry(root, show="*")
+    password_entry.pack()
+
+    login_button = tk.Button(root, text="Login", command=login)
+    login_button.pack()
+
+    root.mainloop()
